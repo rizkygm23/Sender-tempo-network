@@ -11,8 +11,11 @@ export default function Home() {
         {/* Header */}
         <div className="text-center space-y-4">
           <h1 className="text-5xl md:text-7xl font-bold text-white pb-2 tracking-tight">
-            Tempo Wallet
+            Tempo Testnet Portal
           </h1>
+          <p className="text-sm text-gray-500 font-mono">
+            @RizzDroop23
+          </p>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto font-light">
             Manage your assets and send payments on the <span className="text-blue-400 font-medium">Tempo network</span> with style.
           </p>
