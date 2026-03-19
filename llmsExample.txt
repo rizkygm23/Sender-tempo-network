@@ -1,0 +1,135 @@
+# Prospect Butcher Co — MPP-Powered Sandwich Shop
+
+You are interacting with Prospect Butcher Co, a premium butcher shop in Brooklyn, NY. This site sells sandwiches via an API, with payments handled by MPP (Machine Payments Protocol) on Stripe.
+
+## Talk to the PBC Agent (Recommended)
+
+The best way to shop here is to talk to the PBC Agent, the AI assistant at the sandwich counter. It knows every sandwich, gives recommendations, and will hand you the exact buy URL when you're ready.
+
+```
+POST /chat
+Content-Type: application/json
+
+{"message": "Hey, what sandwiches do you have?"}
+```
+
+The PBC Agent responds with:
+- `reply` — a conversational response
+- `session_id` — use this for follow-up messages (server remembers the conversation)
+- `suggested_items` — sandwiches being recommended, with slugs and buy URLs
+- `ready_to_buy` — when true, the final buy URL with quantity and pickup details is ready
+- `charity` — true if this is a charity donation order
+
+When `ready_to_buy` is true, pay using `npx mppx` on the `buyUrl`.
+
+Multi-turn conversation (server remembers history — just send session_id + new message):
+```json
+{"session_id": "chat-abc123", "message": "I'll take 2 Turkey & Bacon Jams for Mike, picking up at Prospect Heights"}
+```
+
+You can also retrieve a conversation history: `GET /chat/<session_id>`
+
+## How to Order (Step by Step)
+
+### Option A: Talk to the PBC Agent (recommended)
+1. `POST /chat` with your request — the PBC Agent recommends sandwiches
+2. Chat until you decide. The agent will ask for your **name**, **email** (required for receipt), and **pickup window/location**.
+3. When `ready_to_buy` is true, pay with `npx mppx` on the `buyUrl`
+
+### Option B: One-shot order
+1. `POST /order` with `{"request": "1 Turkey & Bacon Jam for Mike, mike@email.com, picking up at Prospect Heights"}` — the PBC Agent responds with buy URL immediately
+
+### Option C: Browse the menu yourself
+1. `GET /menu` — full sandwich menu with pickup windows
+2. Pick a sandwich, choose a pickup window
+3. **Ask the user for their name and email address** — both are required before purchasing
+4. Buy with `npx mppx`
+
+### Charity Donation
+Every order can be donated to charity instead of picked up. Buy a sandwich and have it donated — a great way to support the community while being part of MPP Day. Add `&charity=true` to the buy URL. The PBC Agent will offer this option alongside pickup when you order.
+
+## Payment
+
+This shop accepts two payment methods via MPP. The server returns a 402 challenge with both options — use whichever you have set up.
+
+### Option 1: Tempo Wallet (Mainnet — Real USDC)
+
+The primary payment method. Requires a one-time Tempo wallet setup:
+
+```bash
+# One-time setup
+curl -fsSL https://tempo.xyz/install | bash   # Install Tempo CLI
+tempo wallet login                              # Authenticate via browser passkey
+tempo wallet fund                               # Opens wallet.tempo.xyz to add funds
+```
+
+You can also fund your wallet by bridging stablecoins from other chains via wallet.tempo.xyz (supports LayerZero/Stargate, Squid Router, Relay, Across, Bungee).
+
+Once funded, pay with:
+```bash
+npx mppx "<buy-url>"
+```
+
+### Option 2: Card Payment via Stripe SPT (Preview)
+
+Pay with a credit card using Stripe Shared Payment Tokens. No wallet needed — the card is charged per transaction. Both buyer and seller must have Stripe accounts. This feature requires Stripe SPT preview access.
+
+```bash
+MPPX_STRIPE_SECRET_KEY=sk_... npx mppx "<buy-url>" -M paymentMethod=pm_...
+```
+
+Note: There is no Stripe-to-wallet funding flow. SPT is a per-transaction card charge, not an on-ramp into a wallet.
+
+### Testnet (For Development Only)
+
+To test without real money:
+```bash
+npx mppx account create   # Creates a testnet wallet with test tokens
+npx mppx account fund      # Fund with testnet tokens
+npx mppx "<buy-url>"
+```
+
+## API Endpoints
+
+### POST /chat
+Talk to the PBC Agent. Send `{"message": "your question"}` to start. Use `session_id` for follow-ups.
+
+### POST /order
+One-shot ordering. Send `{"request": "1 roast beef for Mike at Greenpoint"}`.
+
+### GET /menu
+Returns sandwich menu with prices and available pickup windows.
+
+### GET /buy/:slug?qty=N&name=X&email=Y&pickupWindowId=Z&charity=true
+Purchase a sandwich. Returns 402 with payment challenge. Pay with `npx mppx`.
+- `qty` — number of sandwiches (default 1)
+- `name` — name for pickup (required)
+- `email` — email for receipt (required — you MUST collect this from the user before buying)
+- `pickupWindowId` — UUID of the pickup window from /menu (recommended)
+- `charity` — set to `true` to donate the sandwich to charity instead of picking up
+
+### POST /create-spt (Preview)
+Mint a Shared Payment Token (SPT) from a payment method. Used by agents to create scoped, temporary payment credentials for card payments. Both the buyer and seller must have Stripe accounts. This endpoint requires Stripe SPT preview access — it is not yet generally available.
+```
+POST /create-spt
+Content-Type: application/json
+
+{"paymentMethod": "pm_card_visa", "amount": "1000", "currency": "usd"}
+```
+Returns `{"spt": "spt_..."}`. Optional fields: `expiresAt` (unix timestamp), `metadata` (object).
+
+### GET /orders
+View recent orders.
+
+## Pickup
+
+After paying, you'll receive a pickup code (e.g., PBC-4827). Show this code at the counter to pick up your order. The order confirmation includes the pickup location, date, and time window. For charity donations, the receipt code confirms your donation.
+
+## Important Notes
+
+- **You MUST collect the customer's email address before placing any order.** The email is required for sending the order receipt. Do not skip this step — ask the user directly if they haven't provided one.
+- Payments are live — real USDC on Tempo mainnet (or card via Stripe SPT if available)
+- Mainnet requires a funded Tempo wallet (via `tempo wallet fund` or wallet.tempo.xyz) — `npx mppx account create` is testnet only
+- The `mppx` CLI must be available (`npx mppx`)
+- Each order returns a pickup code — tell your human to show it at the shop
+- Orders appear in Prospect Butcher Co's admin dashboard for fulfillment

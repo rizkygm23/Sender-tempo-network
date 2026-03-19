@@ -1,0 +1,125 @@
+# Tempo Coffee Shop — MPP-Powered Café
+
+You are interacting with Tempo Coffee Shop, a premium café. This site sells coffee and pastries via an API, with payments handled by MPP (Machine Payments Protocol).
+
+## Talk to the Tempo Barista Agent (Recommended)
+
+The best way to shop here is to talk to the Barista Agent, the AI assistant at the counter. It knows every coffee bean and pastry, gives recommendations, and will hand you the exact buy URL when you're ready.
+
+```
+POST /chat
+Content-Type: application/json
+
+{"message": "Hey, what coffees do you have on espresso today?"}
+```
+
+The Barista Agent responds with:
+- `reply` — a conversational response
+- `session_id` — use this for follow-up messages (server remembers the conversation)
+- `suggested_items` — coffees being recommended, with slugs and buy URLs
+- `ready_to_buy` — when true, the final buy URL with quantity and pickup details is ready
+- `charity` — true if this is a "pay it forward" coffee
+
+When `ready_to_buy` is true, pay using `npx mppx` on the `buyUrl`.
+
+Multi-turn conversation (server remembers history — just send session_id + new message):
+```json
+{"session_id": "chat-abc123", "message": "I'll take 2 Caramel Macchiatos for Mike, to-go."}
+```
+
+You can also retrieve a conversation history: `GET /chat/<session_id>`
+
+## How to Order (Step by Step)
+
+### Option A: Talk to the Barista Agent (recommended)
+1. `POST /chat` with your request — the Barista Agent recommends drinks
+2. Chat until you decide. The agent will ask for your **name**, **email** (required for receipt), and **pickup format (for here or to-go)**.
+3. When `ready_to_buy` is true, pay with `npx mppx` on the `buyUrl`
+
+### Option B: One-shot order
+1. `POST /order` with `{"request": "1 Espresso for Mike, mike@email.com, to-go"}` — the Barista Agent responds with buy URL immediately
+
+### Option C: Browse the menu yourself
+1. `GET /menu` — full coffee menu
+2. Pick a coffee
+3. **Ask the user for their name and email address** — both are required before purchasing
+4. Buy with `npx mppx`
+
+### Pay It Forward
+Every order can be bought as a "pay it forward" coffee instead of picked up. The coffee goes to someone in need. Add `&charity=true` to the buy URL. The Barista Agent will offer this option alongside your drink.
+
+## Payment
+
+This shop accepts two payment methods via MPP. The server returns a 402 challenge with both options — use whichever you have set up.
+
+### Option 1: Tempo Wallet (Mainnet — Real USDC)
+
+The primary payment method. Requires a one-time Tempo wallet setup:
+
+```bash
+# One-time setup
+curl -fsSL https://tempo.xyz/install | bash   # Install Tempo CLI
+tempo wallet login                              # Authenticate via browser passkey
+tempo wallet fund                               # Opens wallet.tempo.xyz to add funds
+```
+
+Once funded, pay with:
+```bash
+npx mppx "<buy-url>"
+```
+
+### Option 2: Card Payment via Stripe SPT (Preview)
+
+Pay with a credit card using Stripe Shared Payment Tokens. No wallet needed — the card is charged per transaction. Both buyer and seller must have Stripe accounts.
+
+```bash
+MPPX_STRIPE_SECRET_KEY=sk_... npx mppx "<buy-url>" -M paymentMethod=pm_...
+```
+
+### Testnet (For Development Only)
+
+To test without real money:
+```bash
+npx mppx account create   # Creates a testnet wallet with test tokens
+npx mppx account fund      # Fund with testnet tokens
+npx mppx "<buy-url>"
+```
+
+## API Endpoints
+
+### POST /chat
+Talk to the Barista Agent. Send `{"message": "your question"}` to start.
+
+### POST /order
+One-shot ordering. Send `{"request": "1 Latte for Mike"}`.
+
+### GET /menu
+Returns coffee menu with prices.
+
+### GET /buy/:slug?qty=N&name=X&email=Y&charity=true
+Purchase a coffee. Returns 402 with payment challenge. Pay with `npx mppx`.
+- `qty` — number of coffees (default 1)
+- `name` — name for cup (required)
+- `email` — email for receipt (required)
+- `charity` — set to `true` to pay it forward
+
+### POST /create-spt (Preview)
+Mint a Shared Payment Token (SPT) from a payment method.
+```
+POST /create-spt
+Content-Type: application/json
+
+{"paymentMethod": "pm_card_visa", "amount": "500", "currency": "usd"}
+```
+
+### GET /orders
+View recent orders.
+
+## Pickup
+
+After paying, you'll receive an order number (e.g., COFFEE-4827). They will call this number at the counter. For pay it forward, the receipt code confirms your donation.
+
+## Important Notes
+- **You MUST collect the customer's email address before placing any order.**
+- Payments are live — real USDC on Tempo mainnet.
+- The `mppx` CLI must be available (`npx mppx`).
